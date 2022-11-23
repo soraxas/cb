@@ -1,0 +1,66 @@
+#!/bin/sh
+
+name="$(basename $0)"
+
+_scs_col="\e[0;32m"
+_wrn_col='\e[1;31m'
+_trn_col='\e[0;33m'
+_res_col='\e[0m'
+
+# Check that xclip is installed.
+if command -v xsel >/dev/null 2>&1; then
+    cb="xsel"
+    params="--clipboard"
+elif command -v xclip >/dev/null 2>&1; then
+    cb="xclip"
+    params="-selection c"
+elif command -v pbcopy >/dev/null 2>&1; then
+    cb="pbcopy"
+    params=""
+else
+    printf "${_wrn_col}%s${_res_col}\n" "You must have 'xsel' or 'xclip' installed."
+    exit 1
+fi
+# Check if user is NOT Root (because Root cannot access User's xorg server)
+if [ "$USER" = "root" ]; then
+    printf "${_wrn_col}%s${_res_col}\n" "You must be regular user (non-root) to copy to clipboard."
+    exit 1
+fi
+
+# If no tty, data should be available on stdin
+if [ -t 0 ]; then
+    # echo running interactivelly
+    if [ "$#" -lt 1 ]; then
+        # If no input, print usage message.
+        printf "%s\n" "$name: Copies a string to the clipboard." \
+            "Usage: $name <string>" \
+            "       echo <string> | cb"
+        exit 1
+    fi
+    input="$@"
+else
+
+    input="$(tee)"
+    # while read line; do
+    #     input="$input\n$line"
+    # done
+    if [ -z "$input" ]; then
+        printf "${_scs_col}%s${_res_col}\n" 'Empty input from stdin.'
+        exit
+    fi
+fi
+
+# Copy input to clipboard
+printf "$input" | "$cb" "$params"
+# Truncate text for status
+if [ ${#input} -gt 80 ]; then
+    input="$(printf "%s$_trn_col..." "$(echo "$input" | head -c80)")"
+fi
+# Print status.
+printf "${_scs_col}%s${_res_col}" "Copied to clipboard: "
+printf "%s\n" "$input"
+# }
+# function f2cb() { cb "$(<"$1")"; }
+# alias cwd2cb='pwd | cb'
+# # Copy most recent command in bash history
+# alias h2cb='fc -ln -1 | tail --lines=2 | head --lines=1 | cb'
