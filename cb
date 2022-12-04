@@ -18,12 +18,12 @@ elif command -v pbcopy >/dev/null 2>&1; then
     cb="pbcopy"
     params=""
 else
-    printf "${_wrn_col}%s${_res_col}\n" "You must have 'xsel' or 'xclip' installed."
+    printf -- "${_wrn_col}%s${_res_col}\n" "You must have 'xsel' or 'xclip' installed."
     exit 1
 fi
 # Check if user is NOT Root (because Root cannot access User's xorg server)
 if [ "$USER" = "root" ]; then
-    printf "${_wrn_col}%s${_res_col}\n" "You must be regular user (non-root) to copy to clipboard."
+    printf -- "${_wrn_col}%s${_res_col}\n" "You must be regular user (non-root) to copy to clipboard."
     exit 1
 fi
 
@@ -32,7 +32,7 @@ if [ -t 0 ]; then
     # echo running interactivelly
     if [ "$#" -lt 1 ]; then
         # If no input, print usage message.
-        printf "%s\n" "$name: Copies a string to the clipboard." \
+        printf -- "%s\n" "$name: Copies a string to the clipboard." \
             "Usage: $name <string>" \
             "       echo <string> | cb"
         exit 1
@@ -45,20 +45,20 @@ else
     #     input="$input\n$line"
     # done
     if [ -z "$input" ]; then
-        printf "${_scs_col}%s${_res_col}\n" 'Empty input from stdin.'
+        printf -- "${_scs_col}%s${_res_col}\n" 'Empty input from stdin.'
         exit
     fi
 fi
 
 # Copy input to clipboard
-printf "$input" | "$cb" $params  # allowr params to split on space
+printf -- "$input" | "$cb" $params  # allowr params to split on space
 # Truncate text for status
 if [ ${#input} -gt 80 ]; then
-    input="$(printf "%s$_trn_col..." "$(echo "$input" | head -c80)")"
+    input="$(printf -- "%s$_trn_col..." "$(echo "$input" | head -c80)")"
 fi
 # Print status.
-printf "${_scs_col}%s${_res_col}" "Copied to clipboard: "
-printf "%s\n" "$input"
+printf -- "${_scs_col}%s${_res_col}" "Copied to clipboard: "
+printf -- "%s\n" "$input"
 # }
 # function f2cb() { cb "$(<"$1")"; }
 # alias cwd2cb='pwd | cb'
