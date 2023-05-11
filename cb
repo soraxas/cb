@@ -51,7 +51,7 @@ else
 fi
 
 # Copy input to clipboard
-printf -- "$input" | "$cb" $params  # allowr params to split on space
+printf -- '%s' "$input" | "$cb" $params  # allowr params to split on space
 # Truncate text for status
 if [ ${#input} -gt 80 ]; then
     input="$(printf -- "%s$_trn_col..." "$(echo "$input" | head -c80)")"
