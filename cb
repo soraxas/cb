@@ -61,6 +61,7 @@ help() {
     printf '\t%s\t%s\n' "-p, --port" "set remote port to listen to in remote netcat mode (default: $remote_port)" >&2
     printf '\t%s\t%s\n' "-r, --remote" "set role to remote listener. This will make $(basename $0) listens input from netcat" >&2
     printf '\t%s\t%s\n' "--remote-sender" "set role to remote sender. This is not necessary as the script auto detect being inside ssh." >&2
+    printf '\t%s\t%s\n' "-d, --daemon" "Starts as a blocking daemon" >&2
 }
 
 raw_send_text_via_socket() (
@@ -94,6 +95,9 @@ if [ "$#" != 0 ]; then
       --remote-listener|--remote|-r)
         remote_mode="listener"
         ;;
+      -d|--daemon)
+        daemon_mode="true"
+        ;;
       --*=*)  # convert '--name=arg' to '--name' 'arg'
         set -- "${opt%%=*}" "${opt#*=}" "$@";;
       -[!-]?*)  # convert '-abc' to '-a' '-b' '-c'
@@ -118,6 +122,11 @@ if [ -z "$remote_mode" ] && inside_ssh; then
     info ">> Detected inside ssh, setting current role as remote sender."
     stderr_endline
     remote_mode="sender"
+fi
+
+if [ -n "$daemon_mode" ] && [ "$remote_mode" != "listener" ]; then
+    error "daemon mode only has effect in listener role"
+    exit 1
 fi
 
 _get_input_local() {
@@ -236,29 +245,36 @@ get_receiver() {
 # fi
 
 
-input="$(get_input "$@")"
-# echo "in4 $input"
-status="$?"
-if [ "$status" -ne 0 ]; then
-    exit "$status"
-fi
+main() {
+  input="$(get_input "$@")"
+  # echo "in4 $input"
+  status="$?"
+  if [ "$status" -ne 0 ]; then
+      exit "$status"
+  fi
 
-# Copy input to clipboard
-printf -- '%s' "$input" | get_receiver
-status="$?"
-if [ "$status" -ne 0 ]; then
-    exit "$status"
-fi
+  # Copy input to clipboard
+  printf -- '%s' "$input" | get_receiver
+  status="$?"
+  if [ "$status" -ne 0 ]; then
+      exit "$status"
+  fi
 
 
-# Truncate text for status
-if [ ${#input} -gt 80 ]; then
-    input="$(printf -- "%s$_trn_col..." "$(echo "$input" | head -c80)")"
-fi
+  # Truncate text for status
+  if [ ${#input} -gt 80 ]; then
+      input="$(printf -- "%s$_trn_col..." "$(echo "$input" | head -c80)")"
+  fi
 
-# Print status.
-stderr_color "${_scs_col}" "Copied to clipboard: "
-stderr_color "" "$input"
-stderr_endline
+  # Print status.
+  stderr_color "${_scs_col}" "Copied to clipboard: "
+  stderr_color "" "$input"
+  stderr_endline
+}
 
-# alias h2cb='fc -ln -1 | tail --lines=2 | head --lines=1 | cb'
+while true
+do
+  main "$@"
+  [ -z "$daemon_mode" ] && break
+done
+
