@@ -7,6 +7,10 @@ _res_col='\e[0m'
 
 # set -x
 
+has_cmd() {
+  command -v "$1" >/dev/null
+}
+
 stderr_color() {
     color_code="$1"
     shift
@@ -15,10 +19,12 @@ stderr_color() {
 
 info() {
     stderr_color "${_scs_col}" "$@"
+    stderr_endline
 }
 
 error() {
     stderr_color "${_wrn_col}" "$@"
+    stderr_endline
 }
 
 stderr_endline() {
@@ -31,6 +37,7 @@ println() {
 
 remote_hostname="localhost"
 remote_port="15756"
+local_port="15756"
 
 inside_ssh() {
     if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
@@ -86,7 +93,11 @@ if [ "$#" != 0 ]; then
         shift
         ;;
       -p|--port)
-        remote_hostname="$1"
+        remote_port="$1"
+        shift
+        ;;
+      p|--local-port)
+        local_port="$1"
         shift
         ;;
       --remote-sender)
@@ -120,7 +131,6 @@ fi
 # auto select ssh mode
 if [ -z "$remote_mode" ] && inside_ssh; then
     info ">> Detected inside ssh, setting current role as remote sender."
-    stderr_endline
     remote_mode="sender"
 fi
 
@@ -157,7 +167,7 @@ _get_input_local() {
 }
 
 _get_input_remote() {
-    nc -cl "$remote_hostname" -p "$remote_port"
+    nc -cl "$remote_hostname" -p "$local_port"
     # the previous command might returns non zero status
     true
 }
@@ -165,8 +175,7 @@ _get_input_remote() {
 
 get_input() {
     if [ "$remote_mode" = "listener" ]; then
-        info "Listening to remote @ $remote_hostname:$remote_port..."
-        stderr_endline
+        info "Listening to $remote_hostname:$local_port..."
         _get_input_remote
     else
         _get_input_local "$@"
@@ -175,24 +184,22 @@ get_input() {
 
 _get_receiver_local() {
     # Check that xclip is installed.
-    if command -v pbcopy >/dev/null 2>&1; then
+    if has_cmd pbcopy; then
         cb="pbcopy"
         params=""
-    elif command -v xsel >/dev/null 2>&1; then
+    elif has_cmd xsel; then
         cb="xsel"
         params="--clipboard"
-    elif command -v xclip >/dev/null 2>&1; then
+    elif has_cmd xclip; then
         cb="xclip"
         params="-selection c"
     else
         error "You must have 'xsel' or 'xclip' installed."
-        stderr_endline
         exit 1
     fi
     # Check if user is NOT Root (because Root cannot access User's xorg server)
     if [ "$USER" = "root" ]; then
         error "You must be regular user (non-root) to copy to clipboard."
-        stderr_endline
         exit 1
     fi
     "$cb" $params  # allows params to split on space
@@ -200,28 +207,28 @@ _get_receiver_local() {
 
 _get_receiver_remote() {
 
-    if command -v nc >/dev/null 2>&1; then
-        nc -c "$remote_hostname" "$remote_port"
-    elif command -v telnet >/dev/null 2>&1; then
-        # sleep to wait for telnet to first connects. It's a heuristic.
-        { sleep .5; printf '%s\n' "$(tee)"; } | telnet "$remote_hostname" "$remote_port"
-    else
-        # use raw socket
-        raw_send_text_via_socket
+    if ! raw_send_text_via_socket; then
+        # try netcat
+        if has_cmd nc; then
+            nc -p -c "$remote_hostname" "$remote_port"
+        elif has_cmd telnet; then
+            # sleep to wait for telnet to first connects. It's a heuristic.
+            { sleep .2; printf '%s\n' "$(tee)"; } | telnet "$remote_hostname" "$remote_port"
+        else
+            # use raw socket
+            raw_send_text_via_socket
+        fi
     fi
     status="$?"
     if [ "$status" -ne 0 ]; then
         error "Error in opening port. If you are in ssh session, have you "
-        stderr_endline
-        error "  (1) open port with '-R $remote_port:localhost:$remote_port', and "
-        stderr_endline
+        error "  (1) open port with '-R $local_port:$remote_hostname:$remote_port', and "
         error "  (2) starts a local $(basename $0) process with '$(basename $0) -r'?"
         stderr_endline
-        stderr_endline
         error "  (tip): You can use ssh escape sequence ~C and then type the previous command"
-        stderr_endline
         error "         to amend a ssh session without closing it."
-        stderr_endline
+        error "         Or add the following line to your ssh config for presisent config:"
+        error "             RemoteForward $local_port $remote_hostname:$remote_port"
         exit 1
     fi
 
@@ -231,7 +238,6 @@ get_receiver() {
     set -o pipefail
     if [ "$remote_mode" = "sender" ]; then
         info "Sending to remote @ $remote_hostname:$remote_port..."
-        stderr_endline
         _get_receiver_remote
     else
         _get_receiver_local
