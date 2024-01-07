@@ -1,66 +1,264 @@
 #!/bin/sh
 
-name="$(basename $0)"
-
 _scs_col="\e[0;32m"
 _wrn_col='\e[1;31m'
 _trn_col='\e[0;33m'
 _res_col='\e[0m'
 
-# Check that xclip is installed.
-if command -v xsel >/dev/null 2>&1; then
-    cb="xsel"
-    params="--clipboard"
-elif command -v xclip >/dev/null 2>&1; then
-    cb="xclip"
-    params="-selection c"
-elif command -v pbcopy >/dev/null 2>&1; then
-    cb="pbcopy"
-    params=""
-else
-    printf -- "${_wrn_col}%s${_res_col}\n" "You must have 'xsel' or 'xclip' installed."
-    exit 1
-fi
-# Check if user is NOT Root (because Root cannot access User's xorg server)
-if [ "$USER" = "root" ]; then
-    printf -- "${_wrn_col}%s${_res_col}\n" "You must be regular user (non-root) to copy to clipboard."
-    exit 1
+# set -x
+
+stderr_color() {
+    color_code="$1"
+    shift
+    printf -- "${color_code}%s${_res_col}" "$@"  >&2
+}
+
+info() {
+    stderr_color "${_scs_col}" "$@"
+}
+
+error() {
+    stderr_color "${_wrn_col}" "$@"
+}
+
+stderr_endline() {
+    printf -- "\n" >&2
+}
+
+println() {
+    printf -- "%s\n" "$@"
+}
+
+remote_hostname="localhost"
+remote_port="15756"
+
+inside_ssh() {
+    if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
+        return 0
+    fi
+    # many other tests omitted
+    case $(ps -o comm= -p "$PPID") in
+    sshd|*/sshd)
+        return 0
+        ;;
+    esac
+    return 1
+}
+
+help() {
+    printf '%s\n' "$(basename "$0"): Copies a string to the clipboard." >&2
+    printf '%s\n' "" >&2
+    printf '%s\n' "Usage: $(basename "$0") <string>" >&2
+    printf '%s\n' "       echo <string> | cb" >&2
+    printf '\n' >&2
+    printf '\t%s\n' "If a pipe exists, this script copy the piped inputs" >&2
+    printf '\t%s\n' "to system clipboard. Otherwise, the given argument" >&2
+    printf '\t%s\n' "will be copied instead." >&2
+    printf '\n' >&2
+    printf '%s\n' "Options:" >&2
+    printf '\t%s\t%s\n' "--help  " "display help message" >&2
+    printf '\t%s\t%s\n' "-r, --hostname" "set remote address to listen to in remote netcat mode (default: $remote_hostname)" >&2
+    printf '\t%s\t%s\n' "-p, --port" "set remote port to listen to in remote netcat mode (default: $remote_port)" >&2
+    printf '\t%s\t%s\n' "-r, --remote" "set role to remote listener. This will make $(basename $0) listens input from netcat" >&2
+    printf '\t%s\t%s\n' "--remote-sender" "set role to remote sender. This is not necessary as the script auto detect being inside ssh." >&2
+}
+
+raw_send_text_via_socket() (
+    # exec 3<>/dev/tcp/localhost/5556; cat >&3; cat <&3; exec 3<&-
+    # The following version closes on EOF
+    exec 3<>/dev/tcp/"$remote_hostname"/"$remote_port"; cat >&3; exec 3<&-
+)
+
+
+EOL=$(echo '\00\07\01\00')
+if [ "$#" != 0 ]; then
+  set -- "$@" "$EOL"
+  while [ "$1" != "$EOL" ]; do
+    opt="$1"; shift
+    case "$opt" in
+      --help)
+        help
+        exit
+        ;;
+      -h|--hostname)
+        remote_hostname="$1"
+        shift
+        ;;
+      -p|--port)
+        remote_hostname="$1"
+        shift
+        ;;
+      --remote-sender)
+        remote_mode="sender"
+        ;;
+      --remote-listener|--remote|-r)
+        remote_mode="listener"
+        ;;
+      --*=*)  # convert '--name=arg' to '--name' 'arg'
+        set -- "${opt%%=*}" "${opt#*=}" "$@";;
+      -[!-]?*)  # convert '-abc' to '-a' '-b' '-c'
+        # shellcheck disable=SC2046  # we want word splitting
+        set -- $(echo "${opt#-}" | sed 's/\(.\)/ -\1/g') "$@";;
+      --)  # process remaining arguments as positional
+        while [ "$1" != "$EOL" ]; do set -- "$@" "$1"; shift; done;;
+      -*)
+        echo "Error: Unsupported flag '$opt'" >&2
+        exit 1
+        ;;
+      *)
+        # set back any unused args
+        set -- "$@" "$opt"
+    esac
+  done
+  shift # remove the EOL token
 fi
 
-# If no tty, data should be available on stdin
-if [ -t 0 ]; then
-    # echo running interactivelly
-    if [ "$#" -lt 1 ]; then
-        # If no input, print usage message.
-        printf -- "%s\n" "$name: Copies a string to the clipboard." \
-            "Usage: $name <string>" \
-            "       echo <string> | cb"
+# auto select ssh mode
+if [ -z "$remote_mode" ] && inside_ssh; then
+    info ">> Detected inside ssh, setting current role as remote sender."
+    stderr_endline
+    remote_mode="sender"
+fi
+
+_get_input_local() {
+    # If no tty, data should be available on stdin
+    if [ -t 0 ]; then
+        # echo running interactivelly
+        if [ "$#" -lt 1 ]; then
+            # If no input, print usage message.
+            error 'No argunment given.'
+            stderr_endline
+            help
+            exit 1
+        fi
+        input="$@"
+    else
+
+        input="$(tee)"
+        # while read line; do
+        #     input="$input\n$line"
+        # done
+    fi
+    if [ -z "$input" ]; then
+        error 'Empty input from stdin.'
+        stderr_endline
         exit 1
     fi
-    input="$@"
-else
+    println "$input"
+}
 
-    input="$(tee)"
-    # while read line; do
-    #     input="$input\n$line"
-    # done
-    if [ -z "$input" ]; then
-        printf -- "${_scs_col}%s${_res_col}\n" 'Empty input from stdin.'
-        exit
+_get_input_remote() {
+    nc -cl "$remote_hostname" -p "$remote_port"
+    # the previous command might returns non zero status
+    true
+}
+
+
+get_input() {
+    if [ "$remote_mode" = "listener" ]; then
+        info "Listening to remote @ $remote_hostname:$remote_port..."
+        stderr_endline
+        _get_input_remote
+    else
+        _get_input_local "$@"
     fi
+}
+
+_get_receiver_local() {
+    # Check that xclip is installed.
+    if command -v pbcopy >/dev/null 2>&1; then
+        cb="pbcopy"
+        params=""
+    elif command -v xsel >/dev/null 2>&1; then
+        cb="xsel"
+        params="--clipboard"
+    elif command -v xclip >/dev/null 2>&1; then
+        cb="xclip"
+        params="-selection c"
+    else
+        error "You must have 'xsel' or 'xclip' installed."
+        stderr_endline
+        exit 1
+    fi
+    # Check if user is NOT Root (because Root cannot access User's xorg server)
+    if [ "$USER" = "root" ]; then
+        error "You must be regular user (non-root) to copy to clipboard."
+        stderr_endline
+        exit 1
+    fi
+    "$cb" $params  # allows params to split on space
+}
+
+_get_receiver_remote() {
+
+    if command -v nc >/dev/null 2>&1; then
+        nc -c "$remote_hostname" "$remote_port"
+    elif command -v telnet >/dev/null 2>&1; then
+        # sleep to wait for telnet to first connects. It's a heuristic.
+        { sleep .5; printf '%s\n' "$(tee)"; } | telnet "$remote_hostname" "$remote_port"
+    else
+        # use raw socket
+        raw_send_text_via_socket
+    fi
+    status="$?"
+    if [ "$status" -ne 0 ]; then
+        error "Error in opening port. If you are in ssh session, have you "
+        stderr_endline
+        error "  (1) open port with '-R $remote_port:localhost:$remote_port', and "
+        stderr_endline
+        error "  (2) starts a local $(basename $0) process with '$(basename $0) -r'?"
+        stderr_endline
+        stderr_endline
+        error "  (tip): You can use ssh escape sequence ~C and then type the previous command"
+        stderr_endline
+        error "         to amend a ssh session without closing it."
+        stderr_endline
+        exit 1
+    fi
+
+}
+
+get_receiver() {
+    set -o pipefail
+    if [ "$remote_mode" = "sender" ]; then
+        info "Sending to remote @ $remote_hostname:$remote_port..."
+        stderr_endline
+        _get_receiver_remote
+    else
+        _get_receiver_local
+    fi
+}
+
+
+# if [ -n "$remote_mode" ]; then
+#     echo hi | raw_send_text_via_socket
+#     exit
+# fi
+
+
+input="$(get_input "$@")"
+# echo "in4 $input"
+status="$?"
+if [ "$status" -ne 0 ]; then
+    exit "$status"
 fi
 
 # Copy input to clipboard
-printf -- "$input" | "$cb" $params  # allowr params to split on space
+printf -- '%s' "$input" | get_receiver
+status="$?"
+if [ "$status" -ne 0 ]; then
+    exit "$status"
+fi
+
+
 # Truncate text for status
 if [ ${#input} -gt 80 ]; then
     input="$(printf -- "%s$_trn_col..." "$(echo "$input" | head -c80)")"
 fi
+
 # Print status.
-printf -- "${_scs_col}%s${_res_col}" "Copied to clipboard: "
-printf -- "%s\n" "$input"
-# }
-# function f2cb() { cb "$(<"$1")"; }
-# alias cwd2cb='pwd | cb'
-# # Copy most recent command in bash history
+stderr_color "${_scs_col}" "Copied to clipboard: "
+stderr_color "" "$input"
+stderr_endline
+
 # alias h2cb='fc -ln -1 | tail --lines=2 | head --lines=1 | cb'
