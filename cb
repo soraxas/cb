@@ -1,6 +1,6 @@
 #!/bin/sh
 
-_scs_col="\e[0;32m"
+_scs_col='\e[0;32m'
 _wrn_col='\e[1;31m'
 _trn_col='\e[0;33m'
 _res_col='\e[0m'
@@ -184,9 +184,11 @@ get_input() {
 
 _get_receiver_local() {
     # Check that xclip is installed.
-    if has_cmd pbcopy; then
+    params=""
+    if has_cmd termux-setup-storage; then
+        cb="termux-clipboard-set"
+    elif has_cmd pbcopy; then
         cb="pbcopy"
-        params=""
     elif has_cmd xsel; then
         cb="xsel"
         params="--clipboard"
@@ -235,7 +237,6 @@ _get_receiver_remote() {
 }
 
 get_receiver() {
-    set -o pipefail
     if [ "$remote_mode" = "sender" ]; then
         info "Sending to remote @ $remote_hostname:$remote_port..."
         _get_receiver_remote
