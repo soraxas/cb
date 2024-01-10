@@ -72,6 +72,7 @@ help() {
 }
 
 raw_send_text_via_socket() (
+    [ -z "$BASH_VERSION" ] && return 1
     # exec 3<>/dev/tcp/localhost/5556; cat >&3; cat <&3; exec 3<&-
     # The following version closes on EOF
     exec 3<>/dev/tcp/"$remote_hostname"/"$remote_port"; cat >&3; exec 3<&-
