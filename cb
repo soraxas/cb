@@ -7,6 +7,9 @@ _res_col='\e[0m'
 
 # set -x
 
+CB_SEN_TYPE=local
+CB_RCR_TYPE=local
+
 has_cmd() {
   command -v "$1" >/dev/null
 }
@@ -266,14 +269,6 @@ _get_receiver_remote() {
 
 }
 
-get_receiver() {
-    if [ "$remote_mode" = "sender" ]; then
-        info "Sending to remote @ $remote_hostname:$remote_port..."
-        _get_receiver_remote
-    else
-        _get_receiver_local
-    fi
-}
 
 
 # if [ -n "$remote_mode" ]; then
@@ -290,6 +285,19 @@ main() {
       exit "$status"
   fi
 
+  # determine receiver
+  if [ "$remote_mode" = "sender" ]; then
+    CB_RCR_TYPE=remote
+    get_receiver() {
+      info "Sending to remote @ $remote_hostname:$remote_port..."
+      _get_receiver_remote
+    }
+  else
+    get_receiver() { 
+      _get_receiver_local
+    }
+  fi
+
   # Copy input to clipboard
   printf -- '%s' "$input" | get_receiver
   status="$?"
@@ -304,7 +312,11 @@ main() {
   fi
 
   # Print status.
-  stderr_color "${_scs_col}" "Copied to clipboard: "
+  if [ "$CB_RCR_TYPE" = "local" ]; then
+    stderr_color "${_scs_col}" "Copied to clipboard: "
+  else
+    stderr_color "${_scs_col}" "Sent clipboard: "
+  fi
   stderr_color "" "$input"
   stderr_endline
 }
