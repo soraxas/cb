@@ -239,9 +239,9 @@ _get_receiver_remote() {
         if has_cmd nc; then
           _detect_nc_type; _type="$?"
           if [ "$_type" -eq 0 ]; then
-            nc -N "$remote_hostname" "$remote_port"
-          elif [ "$_type" -eq 1 ]; then
             nc -p -c "$remote_hostname" "$remote_port"
+          elif [ "$_type" -eq 1 ]; then
+            nc -N "$remote_hostname" "$remote_port"
           fi
         elif has_cmd telnet; then
             # sleep to wait for telnet to first connects. It's a heuristic.
