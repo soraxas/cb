@@ -166,10 +166,34 @@ _get_input_local() {
     println "$input"
 }
 
+_detect_nc_type() {
+  if 2>&1 >/dev/null nc -h | grep -q 'GNU netcat'; then
+    return 0
+  elif 2>&1 >/dev/null nc -h | grep -q 'OpenBSD netcat'; then
+    return 1
+  else
+    error 'Unknown nc type'
+    stderr_endline
+    exit 1
+  fi
+}
+
 _get_input_remote() {
-    nc -cl "$remote_hostname" -p "$local_port"
-    # the previous command might returns non zero status
-    true
+    set +x
+    if has_cmd nc; then
+      _detect_nc_type; _type="$?"
+      if [ "$_type" -eq 0 ]; then
+        nc -cl "$remote_hostname" -p "$local_port"
+        # the previous command might returns non zero status
+        true
+      elif [ "$_type" -eq 1 ]; then
+        nc -l -q0 "$remote_hostname" "$local_port"
+      fi
+    else
+      error 'nc is not installed'
+      stderr_endline
+      exit 1
+    fi
 }
 
 
@@ -212,7 +236,12 @@ _get_receiver_remote() {
     if ! raw_send_text_via_socket; then
         # try netcat
         if has_cmd nc; then
+          _detect_nc_type; _type="$?"
+          if [ "$_type" -eq 0 ]; then
+            nc -N "$remote_hostname" "$remote_port"
+          elif [ "$_type" -eq 1 ]; then
             nc -p -c "$remote_hostname" "$remote_port"
+          fi
         elif has_cmd telnet; then
             # sleep to wait for telnet to first connects. It's a heuristic.
             { sleep .2; printf '%s\n' "$(tee)"; } | telnet "$remote_hostname" "$remote_port"
