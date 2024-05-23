@@ -224,7 +224,7 @@ _get_receiver_local() {
         cb="xclip"
         params="-selection c"
     else
-        error "You must have 'xsel' or 'xclip' installed."
+        error "You must have 'pbcopy' 'xsel' or 'xclip' installed."
         exit 1
     fi
     # Check if user is NOT Root (because Root cannot access User's xorg server)
