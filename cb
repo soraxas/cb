@@ -58,7 +58,7 @@ inside_ssh() {
 help() {
     printf '%s\n' "$(basename "$0"): Copies a string to the clipboard." >&2
     printf '%s\n' "" >&2
-    printf '%s\n' "Usage: $(basename "$0") <string>" >&2
+    printf '%s\n' "Usage: $(basename "$0") [--] <string>" >&2
     printf '%s\n' "       echo <string> | cb" >&2
     printf '\n' >&2
     printf '\t%s\n' "If a pipe exists, this script copy the piped inputs" >&2
@@ -71,6 +71,7 @@ help() {
     printf '\t%s\t%s\n' "-p, --port" "set remote port to listen to in remote netcat mode (default: $remote_port)" >&2
     printf '\t%s\t%s\n' "-r, --remote" "set role to remote listener. This will make $(basename $0) listens input from netcat" >&2
     printf '\t%s\t%s\n' "--remote-sender" "set role to remote sender. This is not necessary as the script auto detect being inside ssh." >&2
+    printf '\t%s\t%s\n' "--no-pipe" "do not try to detect if a pipe exists; only take argument as copy target." >&2
     printf '\t%s\t%s\n' "-d, --daemon" "Starts as a blocking daemon" >&2
 }
 
@@ -113,6 +114,9 @@ if [ "$#" != 0 ]; then
       -d|--daemon)
         daemon_mode="true"
         ;;
+      --no-pipe)
+        no_pipe="true"
+        ;;
       --*=*)  # convert '--name=arg' to '--name' 'arg'
         set -- "${opt%%=*}" "${opt#*=}" "$@";;
       -[!-]?*)  # convert '-abc' to '-a' '-b' '-c'
@@ -145,7 +149,7 @@ fi
 
 _get_input_local() {
     # If no tty, data should be available on stdin
-    if [ -t 0 ]; then
+    if [ -n "$no_pipe" ] || [ -t 0 ]; then
         # echo running interactivelly
         if [ "$#" -lt 1 ]; then
             # If no input, print usage message.
@@ -293,7 +297,7 @@ main() {
       _get_receiver_remote
     }
   else
-    get_receiver() { 
+    get_receiver() {
       _get_receiver_local
     }
   fi
