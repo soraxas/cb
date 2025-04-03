@@ -215,22 +215,39 @@ get_input() {
 }
 
 _get_receiver_local() {
-    # Check that xclip is installed.
     params=""
-    if has_cmd termux-setup-storage; then
-        cb="termux-clipboard-set"
-    elif has_cmd pbcopy; then
-        cb="pbcopy"
-    elif has_cmd xsel; then
-        cb="xsel"
-        params="--clipboard"
-    elif has_cmd xclip; then
-        cb="xclip"
-        params="-selection c"
-    else
-        error "You must have 'pbcopy' 'xsel' or 'xclip' installed."
+
+    if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+
+      if has_cmd wl-clip; then
+        cb="wl-clip"
+        params="-i -selection clipboard"
+      else
+        error "Wayland session detected. "
+        error "But wayland-specific clipboard manager wl-clip not found. This script might not work."
+        stderr_endline
         exit 1
+      fi
+
+    else
+      # X-session
+
+      if has_cmd termux-setup-storage; then
+          cb="termux-clipboard-set"
+      elif has_cmd pbcopy; then
+          cb="pbcopy"
+      elif has_cmd xsel; then
+          cb="xsel"
+          params="--clipboard"
+      elif has_cmd xclip; then
+          cb="xclip"
+          params="-selection c"
+      else
+          error "You must have 'pbcopy' 'xsel' or 'xclip' installed."
+          exit 1
+      fi
     fi
+
     # Check if user is NOT Root (because Root cannot access User's xorg server)
     if [ "$USER" = "root" ]; then
         error "You must be regular user (non-root) to copy to clipboard."
