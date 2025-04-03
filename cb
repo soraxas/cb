@@ -291,16 +291,8 @@ _get_receiver_remote() {
 }
 
 
-
-# if [ -n "$remote_mode" ]; then
-#     echo hi | raw_send_text_via_socket
-#     exit
-# fi
-
-
 main() {
   input="$(get_input "$@")"
-  # echo "in4 $input"
   status="$?"
   if [ "$status" -ne 0 ]; then
       exit "$status"
