@@ -39,6 +39,7 @@ println() {
 }
 
 remote_hostname="localhost"
+remote_mode_method="osc52"
 remote_port="15756"
 local_port="15756"
 
@@ -73,6 +74,7 @@ help() {
     printf '\t%s\t%s\n' "--remote-sender" "set role to remote sender. This is not necessary as the script auto detect being inside ssh." >&2
     printf '\t%s\t%s\n' "--no-pipe" "do not try to detect if a pipe exists; only take argument as copy target." >&2
     printf '\t%s\t%s\n' "-d, --daemon" "Starts as a blocking daemon" >&2
+    printf '\t%s\t%s\n' "--remote-socket" "Use remote socket for ssh mode" >&2
 }
 
 raw_send_text_via_socket() (
@@ -81,6 +83,22 @@ raw_send_text_via_socket() (
     # The following version closes on EOF
     exec 3<>/dev/tcp/"$remote_hostname"/"$remote_port"; cat >&3; exec 3<&-
 )
+
+# Sends the input string to the system clipboard using OSC 52 escape sequence.
+# Requires a terminal that supports OSC 52 (e.g., xterm, iTerm2, Windows Terminal).
+osc52_clipboard() {
+    input="$(cat)"
+    # Base64 encode the string (no newline)
+    base64_data=$(printf "%s" "$input" | base64 | tr -d '\n')
+
+    # Send OSC 52 sequence to the terminal
+    # Format: ESC ] 52 ; c ; <base64> BEL
+    # ESC = \e
+    # ]52 = Operating System Command (OSC 52) to access clipboard
+    # ;c; = c means clipboard
+    # BEL = \a ends the escape sequence (alternative: \e\\ for string terminator)
+    echo -ne "\e]52;c;${base64_data}\a"
+}
 
 
 EOL=$(echo '\00\07\01\00')
@@ -107,6 +125,9 @@ if [ "$#" != 0 ]; then
         ;;
       --remote-sender)
         remote_mode="sender"
+        ;;
+      --remote-socket)
+        remote_mode_method="remote-socket"
         ;;
       --remote-listener|--remote|-r)
         remote_mode="listener"
@@ -302,8 +323,15 @@ main() {
   if [ "$remote_mode" = "sender" ]; then
     CB_RCR_TYPE=remote
     get_receiver() {
-      info "Sending to remote @ $remote_hostname:$remote_port..."
-      _get_receiver_remote
+      info "Sending to remote ($remote_mode_method) @ $remote_hostname:$remote_port..."
+      if [ "$remote_mode_method" = "osc52" ]; then
+        osc52_clipboard
+      elif [ "$remote_mode_method" = "remote-socket" ]; then
+        _get_receiver_remote
+      else
+        error "unknown method $remote_mode_method"
+        exit 1
+      fi
     }
   else
     get_receiver() {
