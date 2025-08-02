@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 _scs_col='\e[0;32m'
 _wrn_col='\e[1;31m'
